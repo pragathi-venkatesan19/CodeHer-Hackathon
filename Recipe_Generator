@@ -1,0 +1,166 @@
+# STEP 1: Install required packages
+!pip install gTTS fpdf
+
+# STEP 2: Import Libraries
+import pandas as pd
+from gtts import gTTS
+from IPython.display import display, Audio
+from google.colab import files
+import io
+import ipywidgets as widgets
+from fpdf import FPDF
+import tempfile
+
+# STEP 3: Upload your dataset
+print("Upload your recipe dataset CSV file:")
+uploaded = files.upload()
+df = pd.read_csv(io.BytesIO(list(uploaded.values())[0]))
+df.columns = df.columns.str.strip()
+df.drop_duplicates(subset='Dish_Name', inplace=True)
+
+# STEP 4: Setup Dropdown Options
+fixed_meal_types = ['All', 'Breakfast', 'Lunch', 'Dinner', 'Snack']
+all_ingredients = sorted({i.strip() for sublist in df['Ingredients'].str.split(',') for i in sublist})
+all_cuisines = ['All'] + sorted(df['Cuisine'].dropna().unique())
+all_diet_types = ['All'] + sorted(df['Diet_Type'].dropna().unique())
+favorites = []
+favorites_visible = False
+
+# STEP 5: Widget Setup
+ingredient_selector = widgets.SelectMultiple(
+    options=all_ingredients,
+    description='Ingredients:',
+    layout=widgets.Layout(width='100%', height='150px'),
+    style={'description_width': 'initial'}
+)
+
+selected_display = widgets.HTML("<b>Selected Ingredients:</b> None")
+def update_display(change):
+    selected = ", ".join(ingredient_selector.value) if ingredient_selector.value else "None"
+    selected_display.value = f"<b>Selected Ingredients:</b> {selected}"
+ingredient_selector.observe(update_display, names='value')
+
+cuisine_dropdown = widgets.Dropdown(options=all_cuisines, description='Cuisine:', layout=widgets.Layout(width='45%'))
+diet_dropdown = widgets.Dropdown(options=all_diet_types, description='Diet Type:', layout=widgets.Layout(width='45%'))
+meal_dropdown = widgets.Dropdown(options=fixed_meal_types, description='Meal Type:', layout=widgets.Layout(width='45%'))
+
+output = widgets.Output()
+favorites_output = widgets.Output()
+favorites_box = widgets.VBox([widgets.HTML("<h4>Favorite Recipes</h4>"), favorites_output])
+favorites_box.layout.display = 'none'  # Hidden by default
+
+generate_button = widgets.Button(description='Show Recipes', button_style='success')
+favorites_button = widgets.Button(description='View Favorites', button_style='warning')
+
+# STEP 6: Helper Functions
+def speak_recipe(row):
+    text = f"{row['Dish_Name']}. Ingredients: {row['Ingredients']}. " + \
+           f"{row['Step_1']} {row['Step_2']} {row['Step_3']} {row['Step_4']}"
+    tts = gTTS(text=text)
+    tts.save("recipe.mp3")
+    display(Audio("recipe.mp3", autoplay=True))
+
+def download_pdf(recipe):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"Recipe: {recipe['Dish_Name']}", ln=True, align='C')
+    pdf.ln(5)
+    for key in ['Cuisine', 'Meal_Type', 'Diet_Type']:
+        if key in recipe:
+            pdf.multi_cell(0, 10, f"{key.replace('_', ' ')}: {recipe[key]}")
+    pdf.ln(5)
+    pdf.multi_cell(0, 10, f"Ingredients: {recipe['Ingredients']}")
+    pdf.ln(5)
+    pdf.multi_cell(0, 10, "Instructions:")
+    for s in ['Step_1', 'Step_2', 'Step_3', 'Step_4']:
+        pdf.multi_cell(0, 10, recipe[s])
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmpfile:
+        pdf.output(tmpfile.name)
+        display(widgets.HTML("<b>Download PDF:</b>"))
+        files.download(tmpfile.name)
+
+def save_to_favorites(recipe):
+    if recipe['Dish_Name'] not in [r['Dish_Name'] for r in favorites]:
+        favorites.append(recipe)
+        print(f"'{recipe['Dish_Name']}' added to favorites!")
+
+def display_recipes(filtered_df, target_output):
+    target_output.clear_output()
+    with target_output:
+        if filtered_df.empty:
+            print("No matching recipes found.")
+        else:
+            print(f"{len(filtered_df)} recipe(s) found.\n")
+            items = []
+            for _, row in filtered_df.iterrows():
+                title = f"{row['Dish_Name']} | {row['Cuisine']} | {row['Meal_Type']} | {row['Diet_Type']}"
+                steps = "\n".join([f"{step}: {row[step]}" for step in ['Step_1', 'Step_2', 'Step_3', 'Step_4']])
+                text = f"Ingredients: {row['Ingredients']}\n\nInstructions:\n{steps}"
+                text_widget = widgets.HTML(f"<pre>{text}</pre>")
+
+                read_btn = widgets.Button(description="Read Aloud", button_style='info')
+                fav_btn = widgets.Button(description="Save to Favorites", button_style='warning')
+                pdf_btn = widgets.Button(description="Download PDF", button_style='primary')
+
+                read_btn.on_click(lambda x, r=row: speak_recipe(r))
+                fav_btn.on_click(lambda x, r=row: save_to_favorites(r))
+                pdf_btn.on_click(lambda x, r=row: download_pdf(r))
+
+                accordion = widgets.Accordion(children=[widgets.VBox([text_widget, widgets.HBox([read_btn, fav_btn, pdf_btn])])])
+                accordion.set_title(0, title)
+                items.append(accordion)
+
+            display(widgets.VBox(items))
+
+# STEP 7: Show Recipes
+def show_recipes(b):
+    selected_ings = [ing.lower() for ing in ingredient_selector.value]
+    filtered = df.copy()
+
+    if selected_ings:
+        def match(row):
+            row_ings = [i.strip().lower() for i in row['Ingredients'].split(',')]
+            return all(ing in row_ings for ing in selected_ings)
+        filtered = filtered[filtered.apply(match, axis=1)]
+
+    if cuisine_dropdown.value != 'All':
+        filtered = filtered[filtered['Cuisine'] == cuisine_dropdown.value]
+    if diet_dropdown.value != 'All':
+        filtered = filtered[filtered['Diet_Type'] == diet_dropdown.value]
+    if meal_dropdown.value != 'All':
+        filtered = filtered[filtered['Meal_Type'] == meal_dropdown.value]
+
+    display_recipes(filtered, output)
+
+# STEP 8: Toggle Favorites
+def toggle_favorites(b):
+    global favorites_visible
+    favorites_visible = not favorites_visible
+    if favorites_visible:
+        favorites_output.clear_output()
+        if favorites:
+            fav_df = pd.DataFrame(favorites)
+            display_recipes(fav_df, favorites_output)
+        else:
+            with favorites_output:
+                print("No favorite recipes saved yet.")
+        favorites_box.layout.display = 'block'
+    else:
+        favorites_box.layout.display = 'none'
+
+# STEP 9: Button Actions
+generate_button.on_click(show_recipes)
+favorites_button.on_click(toggle_favorites)
+
+# STEP 10: Display All UI Components
+display(widgets.VBox([
+    ingredient_selector,
+    selected_display,
+    widgets.HBox([cuisine_dropdown, diet_dropdown]),
+    widgets.HBox([meal_dropdown]),
+    generate_button,
+    favorites_button,
+    output,
+    favorites_box
+]))
