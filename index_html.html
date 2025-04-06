@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Foodify - Reduce Food Waste</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: #e8f5e9;
+    }
+
+    nav {
+      background-color: #2e7d32;
+      padding: 10px 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: white;
+    }
+
+    nav a {
+      color: white;
+      margin-left: 20px;
+      text-decoration: none;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-between;
+      align-items: center;
+      padding: 60px 10%;
+      background-color: white;
+      border-radius: 16px;
+      margin: 40px auto;
+      max-width: 1000px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+
+    .content {
+      flex: 1;
+      margin-right: 40px;
+    }
+
+    .content h1 {
+      font-size: 3em;
+      color: #2e7d32;
+      margin-bottom: 10px;
+    }
+
+    .content p {
+      font-size: 1.1em;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    input[type="email"], input[type="file"] {
+      padding: 12px;
+      width: 100%;
+      max-width: 350px;
+      border: 2px solid #a5d6a7;
+      border-radius: 8px;
+      font-size: 1em;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin-top: 15px;
+      background-color: #43a047;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background-color: #2e7d32;
+    }
+
+    .message {
+      margin-top: 15px;
+      font-weight: bold;
+    }
+
+    .image-section {
+      flex: 1;
+      text-align: right;
+    }
+
+    .image-section img {
+      width: 100%;
+      max-width: 400px;
+      height: auto;
+      border-radius: 12px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
+
+    footer {
+      background: #c8e6c9;
+      padding: 10px;
+      text-align: center;
+      font-weight: 500;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    #ocrOutput {
+      margin-top: 20px;
+      background: #f1f8e9;
+      padding: 15px;
+      border-radius: 10px;
+      text-align: left;
+      white-space: pre-wrap;
+      font-size: 16px;
+      color: #333;
+    }
+
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+        text-align: center;
+      }
+      .image-section {
+        margin-top: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <div>🥬 Foodify</div>
+    <div>
+      <a onclick="showSection('homeSection')">Home</a>
+      <a onclick="showSection('ocrSection')">OCR</a>
+      <a href="expiry.html">Expiry Tracker</a>
+    </div>
+  </nav>
+
+  <!-- Home Section -->
+  <div class="container" id="homeSection">
+    <div class="content">
+      <h1>Reduce Food Waste</h1>
+      <p>Get expiry alerts and grocery insights straight to your inbox. Enter your email to get started!</p>
+      
+      <input type="email" id="email" placeholder="Enter your email" />
+      <br />
+      <button onclick="saveEmail()">Get Started</button>
+      <div class="message" id="messageBox"></div>
+    </div>
+
+    <div class="image-section">
+      <img src="C:\Users\TEMP\Desktop\foodimg.jpg" alt="Groceries Image">
+    </div>
+  </div>
+
+  <!-- OCR Section -->
+  <div class="container hidden" id="ocrSection">
+    <div class="content">
+      <h1>Upload Grocery Bill</h1>
+      <p>We’ll extract known grocery items for tracking. Upload your bill image below.</p>
+      <input type="file" id="ocrInput" accept="image/*" />
+      <div id="ocrOutput">No image uploaded yet.</div>
+    </div>
+
+    <div class="image-section">
+      <img src="C:\Users\TEMP\Desktop\ocrimg.png" alt="OCR Image">
+    </div>
+  </div>
+
+  <footer>
+    🍀 Powered by Foodify | Making sustainability easier.
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@2.1.5/dist/tesseract.min.js"></script>
+  <script>
+    function saveEmail() {
+      const email = document.getElementById('email').value;
+      const messageBox = document.getElementById('messageBox');
+
+      if (!email || !email.includes('@')) {
+        messageBox.textContent = '❌ Please enter a valid email.';
+        messageBox.style.color = 'red';
+        return;
+      }
+
+      localStorage.setItem('userEmail', email);
+      messageBox.textContent = `✅ Email ${email} saved successfully!`;
+      messageBox.style.color = '#2e7d32';
+      document.getElementById('email').value = '';
+    }
+
+    function showSection(sectionId) {
+      document.getElementById('homeSection').classList.add('hidden');
+      document.getElementById('ocrSection').classList.add('hidden');
+
+      document.getElementById(sectionId).classList.remove('hidden');
+    }
+
+    const knownItems = ["milk", "bread", "rice", "sugar", "salt", "oil", "wheat", "atta", "dal", "onion", "tomato", "potato", "egg", "butter", "cheese", "curd", "paneer", "juice", "biscuit", "noodles", "soap", "shampoo", "toothpaste", "detergent"];
+
+    document.getElementById("ocrInput").addEventListener("change", function() {
+      const file = this.files[0];
+      const output = document.getElementById("ocrOutput");
+
+      if (!file) return;
+
+      output.innerHTML = "⏳ Processing image using OCR...";
+
+      Tesseract.recognize(file, 'eng', {
+        logger: m => console.log(m)
+      }).then(({ data: { text } }) => {
+        const lowerText = text.toLowerCase();
+        const foundItems = knownItems.filter(item => lowerText.includes(item));
+        const uniqueItems = [...new Set(foundItems)];
+
+        output.innerHTML =
+          `<b>📃 Extracted Text:</b><br>${text}<br><br>` +
+          `<b>🛒 Detected Items:</b><br>${uniqueItems.length ? uniqueItems.join(", ") : "No known items found."}`;
+      }).catch(err => {
+        output.innerHTML = `<b>❌ Error:</b> ${err.message}`;
+      });
+    });
+  </script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+       
